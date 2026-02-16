@@ -1,11 +1,9 @@
-import MesasMap from './mesas-map'
-import MesasTable from './mesas-table'
-import MesaForm from './mesa-form'
-import { getMesas } from './actions'
+import SalonBoard from './salon-board'
+import { getMesas, getSalonLabels, getSalonFloors } from './actions'
 import { Grid3x3 } from 'lucide-react'
 
 export default async function SalonPage() {
-  const mesas = await getMesas()
+  const [mesas, labels, floors] = await Promise.all([getMesas(), getSalonLabels(), getSalonFloors()])
 
   return (
     <div className="flex flex-col gap-8">
@@ -19,9 +17,7 @@ export default async function SalonPage() {
         <h3 className="text-xl font-semibold">Mesas</h3>
       </div>
 
-      <MesaForm />
-      <MesasTable mesas={mesas} />
-      {/* <MesasMap mesas={mesas} /> */}
+      <SalonBoard mesas={mesas} labels={labels} floors={floors} />
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { canAccessPath, getHomePathForRole, normalizeRole } from '@/utils/rbac'
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -33,7 +34,8 @@ export async function middleware(request: NextRequest) {
   const url = request.nextUrl.clone()
   const isAuthPage = url.pathname === '/login'
   const isOnboardingPage = url.pathname === '/onboarding'
-  const isPrivatePage = url.pathname.startsWith('/admin') || url.pathname.startsWith('/pos')
+  const isDebugPage = url.pathname === '/debug'
+  const isPrivatePage = url.pathname.startsWith('/admin') || url.pathname.startsWith('/pos') || url.pathname.startsWith('/kitchen')
 
   // 2. Si no hay usuario y trata de acceder a rutas privadas, al Login
   if (!user && isPrivatePage) {
@@ -41,16 +43,22 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  // Permitir acceso a debug sin redirecciones
+  if (isDebugPage) {
+    return supabaseResponse
+  }
+
   // 3. Lógica de Onboarding (Solo si hay usuario)
   if (user) {
     // Consultamos el perfil del usuario para ver si tiene restaurante
     const { data: perfil } = await supabase
       .from('perfiles')
-      .select('restaurante_id')
+      .select('restaurante_id, rol')
       .eq('id', user.id)
-      .single()
+      .maybeSingle()
 
     const tieneRestaurante = !!perfil?.restaurante_id
+    const rol = normalizeRole(perfil?.rol)
 
     // CASO A: No tiene restaurante y no está en onboarding -> Mandar a onboarding
     if (!tieneRestaurante && isPrivatePage && !isOnboardingPage) {
@@ -61,6 +69,12 @@ export async function middleware(request: NextRequest) {
     // CASO B: Ya tiene restaurante pero intenta entrar a onboarding -> Mandar al admin
     if (tieneRestaurante && isOnboardingPage) {
       url.pathname = '/admin'
+      return NextResponse.redirect(url)
+    }
+
+    if (tieneRestaurante && isPrivatePage && !canAccessPath(rol, url.pathname)) {
+      url.pathname = '/access-denied'
+      url.searchParams.set('from', request.nextUrl.pathname)
       return NextResponse.redirect(url)
     }
   }

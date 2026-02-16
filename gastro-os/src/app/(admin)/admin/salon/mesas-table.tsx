@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { deleteMesa, cambiarEstadoMesa } from './actions'
+import EditMesaDialog from './edit-mesa-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Trash2, Grid3x3, Users } from 'lucide-react'
@@ -14,14 +15,24 @@ interface Mesa {
   estado: 'libre' | 'ocupada' | 'sucia'
   posicion_x: number
   posicion_y: number
+  width?: number | null
+  height?: number | null
+  shape?: 'rect' | 'round' | 'bar' | null
+  salon_floor_id?: string | null
   created_at: string
+}
+
+type Floor = {
+  id: string
+  nombre: string
 }
 
 interface MesasTableProps {
   mesas: Mesa[]
+  floors: Floor[]
 }
 
-export default function MesasTable({ mesas }: MesasTableProps) {
+export default function MesasTable({ mesas, floors }: MesasTableProps) {
   const [isPending, startTransition] = useTransition()
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
@@ -124,6 +135,15 @@ export default function MesasTable({ mesas }: MesasTableProps) {
                     <Button
                       variant="ghost"
                       size="sm"
+                      onClick={() => handleCambiarEstado(mesa.id, 'ocupada')}
+                      disabled={isPending || mesa.estado === 'ocupada'}
+                      className="text-xs"
+                    >
+                      Ocupar
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => handleCambiarEstado(mesa.id, 'sucia')}
                       disabled={isPending || mesa.estado === 'sucia'}
                       className="text-xs"
@@ -133,15 +153,18 @@ export default function MesasTable({ mesas }: MesasTableProps) {
                   </div>
                 </td>
                 <td className="p-4 text-center">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleDelete(mesa.id)}
-                    disabled={deletingId === mesa.id}
-                    className="text-red-500 hover:text-red-400 hover:bg-red-950/20"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                  <div className="flex items-center justify-center gap-2">
+                    <EditMesaDialog mesa={mesa} floors={floors} />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDelete(mesa.id)}
+                      disabled={deletingId === mesa.id}
+                      className="text-red-500 hover:text-red-400 hover:bg-red-950/20"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </td>
               </tr>
             ))}

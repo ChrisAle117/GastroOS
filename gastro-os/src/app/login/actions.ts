@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/utils/supabase/server' // Ajusta el path si moviste la carpeta
+import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 
 export async function login(formData: FormData) {
@@ -11,12 +11,29 @@ export async function login(formData: FormData) {
     password: formData.get('password') as string,
   }
 
-  const { error } = await supabase.auth.signInWithPassword(data)
+  const { error, data: authData } = await supabase.auth.signInWithPassword(data)
 
   if (error) {
     redirect('/login?error=Could not authenticate user')
   }
 
-  // Si todo sale bien, mandamos al admin
+  // Verificar si existe el perfil, si no, crearlo
+  if (authData.user) {
+    const { data: perfil } = await supabase
+      .from('perfiles')
+      .select('id')
+      .eq('id', authData.user.id)
+      .single()
+
+    if (!perfil) {
+      await supabase
+        .from('perfiles')
+        .insert({
+          id: authData.user.id,
+        })
+    }
+  }
+
+  // Si todo sale bien, mandamos al admin (el middleware decidirá si va a onboarding)
   redirect('/admin')
 }
