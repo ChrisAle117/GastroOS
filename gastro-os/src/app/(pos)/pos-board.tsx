@@ -1,129 +1,141 @@
 "use client"
 
-import { useMemo, useOptimistic, useState, useTransition } from 'react'
-import { addOrderItem, createOrder } from './actions'
+import { useState } from 'react'
+import { ShoppingCart, Users } from 'lucide-react'
+import SalonMap from './salon-map'
+import ComanderoModal from './comandero-modal'
 
-type Mesa = { id: number; nombre: string }
-type Producto = { id: number; nombre: string; precio: number }
+type Floor = {
+  id: string
+  nombre: string
+  grid_width: number
+  grid_height: number
+}
 
-type OrderItem = {
-  producto_id: number
+type Mesa = {
+  id: string
+  nombre: string
+  posicion_x: number
+  posicion_y: number
+  estado: 'libre' | 'ocupada' | 'sucia'
+  capacidad: number
+  width?: number | null
+  height?: number | null
+  shape?: 'rect' | 'round' | 'bar' | null
+  grupo_id?: string | null
+  salon_floor_id?: string | null
+}
+
+type Producto = {
+  id: number
   nombre: string
   precio: number
-  cantidad: number
+  categoria_id?: number | null
+}
+
+type Categoria = {
+  id: number
+  nombre: string
+  orden: number
+}
+
+type OrdenActiva = {
+  id: number
+  mesa_id: string
+  estado: string
+  total?: number | null
+  created_at: string
 }
 
 type Props = {
+  floors: Floor[]
   mesas: Mesa[]
   productos: Producto[]
+  categorias: Categoria[]
+  ordenesActivas: OrdenActiva[]
 }
 
-export default function PosBoard({ mesas, productos }: Props) {
-  const [selectedMesaId, setSelectedMesaId] = useState<number | null>(null)
-  const [orderId, setOrderId] = useState<number | null>(null)
-  const [orderItems, setOrderItems] = useState<OrderItem[]>([])
-  const [isPending, startTransition] = useTransition()
+export default function PosBoard({ floors, mesas, productos, categorias, ordenesActivas }: Props) {
+  const [selectedFloorId, setSelectedFloorId] = useState<string | null>(floors[0]?.id ?? null)
+  const [selectedMesa, setSelectedMesa] = useState<Mesa | null>(null)
+  const [showComandero, setShowComandero] = useState(false)
 
-  const [optimisticItems, addOptimisticItem] = useOptimistic(
-    orderItems,
-    (state: OrderItem[], item: OrderItem) => [...state, item]
-  )
+  const selectedFloor = floors.find((f) => f.id === selectedFloorId) ?? floors[0]
 
-  const total = useMemo(
-    () => optimisticItems.reduce((sum, item) => sum + item.precio * item.cantidad, 0),
-    [optimisticItems]
-  )
+  const mesasFiltradas = mesas.filter((mesa) => {
+    const fallbackFloorId = floors[0]?.id
+    if (!mesa.salon_floor_id) return selectedFloorId === fallbackFloorId
+    return mesa.salon_floor_id === selectedFloorId
+  })
 
-  const handleAddProduct = (producto: Producto) => {
-    if (!selectedMesaId) return
-
-    startTransition(async () => {
-      let currentOrderId = orderId
-      if (!currentOrderId) {
-        currentOrderId = await createOrder(selectedMesaId)
-        setOrderId(currentOrderId)
-      }
-
-      const item: OrderItem = {
-        producto_id: producto.id,
-        nombre: producto.nombre,
-        precio: producto.precio,
-        cantidad: 1,
-      }
-
-      addOptimisticItem(item)
-      await addOrderItem(currentOrderId!, producto.id, 1, producto.precio)
-      setOrderItems((prev) => [...prev, item])
-    })
+  const handleMesaClick = (mesa: Mesa) => {
+    setSelectedMesa(mesa)
+    setShowComandero(true)
   }
 
+  const mesasOcupadas = mesas.filter(m => m.estado === 'ocupada').length
+  const totalMesas = mesas.length
+
   return (
-    <div className="flex flex-col gap-6 p-6 text-white">
-      <h1 className="text-2xl font-bold">Comandero</h1>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <section className="md:col-span-1">
-          <h2 className="text-lg font-semibold mb-2">Mesas</h2>
-          <div className="grid grid-cols-2 gap-2">
-            {mesas.map((mesa) => (
-              <button
-                key={mesa.id}
-                onClick={() => {
-                  setSelectedMesaId(mesa.id)
-                  setOrderId(null)
-                  setOrderItems([])
-                }}
-                className={`p-3 rounded-lg border transition ${
-                  selectedMesaId === mesa.id
-                    ? 'bg-orange-600 border-orange-500'
-                    : 'bg-zinc-900 border-zinc-800 hover:border-orange-500'
-                }`}
-              >
-                {mesa.nombre}
-              </button>
-            ))}
+    <div className="flex flex-col h-screen bg-zinc-950">
+      {/* Header Stats */}
+      <div className="bg-zinc-900 border-b border-zinc-800 p-4">
+        <div className="flex items-center justify-between max-w-screen-2xl mx-auto">
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2">
+              <Users className="w-5 h-5 text-orange-500" />
+              <span className="text-sm text-zinc-400">Mesas:</span>
+              <span className="text-lg font-bold">{mesasOcupadas}/{totalMesas}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <ShoppingCart className="w-5 h-5 text-orange-500" />
+              <span className="text-sm text-zinc-400">Órdenes activas:</span>
+              <span className="text-lg font-bold">{ordenesActivas.length}</span>
+            </div>
           </div>
-        </section>
-
-        <section className="md:col-span-1">
-          <h2 className="text-lg font-semibold mb-2">Productos</h2>
-          <div className="flex flex-col gap-2 max-h-[520px] overflow-auto pr-2">
-            {productos.map((producto) => (
-              <button
-                key={producto.id}
-                onClick={() => handleAddProduct(producto)}
-                disabled={!selectedMesaId || isPending}
-                className="flex items-center justify-between p-3 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-orange-500 disabled:opacity-50"
-              >
-                <span>{producto.nombre}</span>
-                <span>${producto.precio}</span>
-              </button>
-            ))}
+          
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-zinc-400">Piso:</span>
+            <select
+              value={selectedFloorId ?? ''}
+              onChange={(e) => setSelectedFloorId(e.target.value)}
+              className="bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-sm"
+            >
+              {floors.map((floor) => (
+                <option key={floor.id} value={floor.id}>
+                  {floor.nombre}
+                </option>
+              ))}
+            </select>
           </div>
-        </section>
-
-        <section className="md:col-span-1">
-          <h2 className="text-lg font-semibold mb-2">Comanda</h2>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 min-h-[320px]">
-            {optimisticItems.length === 0 ? (
-              <p className="text-zinc-400">Agrega productos para iniciar la comanda.</p>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {optimisticItems.map((item, index) => (
-                  <div key={`${item.producto_id}-${index}`} className="flex justify-between">
-                    <span>{item.nombre} x{item.cantidad}</span>
-                    <span>${item.precio * item.cantidad}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="flex justify-between mt-4 text-lg font-semibold">
-            <span>Total</span>
-            <span>${total}</span>
-          </div>
-        </section>
+        </div>
       </div>
+
+      {/* Salon Map */}
+      <div className="flex-1 overflow-auto p-6">
+        {selectedFloor && (
+          <SalonMap
+            mesas={mesasFiltradas}
+            canvasWidth={selectedFloor.grid_width}
+            canvasHeight={selectedFloor.grid_height}
+            onMesaClick={handleMesaClick}
+            ordenesActivas={ordenesActivas}
+          />
+        )}
+      </div>
+
+      {/* Comandero Modal */}
+      {showComandero && selectedMesa && (
+        <ComanderoModal
+          mesa={selectedMesa}
+          productos={productos}
+          categorias={categorias}
+          onClose={() => {
+            setShowComandero(false)
+            setSelectedMesa(null)
+          }}
+        />
+      )}
     </div>
   )
 }

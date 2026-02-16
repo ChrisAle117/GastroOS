@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from '@/utils/supabase/server'
+import { revalidatePath } from 'next/cache'
 
 async function getRestauranteId() {
   const supabase = await createClient()
@@ -29,6 +30,15 @@ export async function createOrder(mesaId: number) {
     .single()
 
   if (error || !data) throw new Error('No se pudo crear la orden')
+
+  // Update mesa status to ocupada
+  await supabase
+    .from('mesas')
+    .update({ estado: 'ocupada' })
+    .eq('id', mesaId)
+    .eq('restaurante_id', restauranteId)
+
+  revalidatePath('/pos')
   return data.id as number
 }
 
@@ -46,4 +56,20 @@ export async function addOrderItem(orderId: number, productoId: number, cantidad
   })
 
   if (error) throw new Error('No se pudo agregar el item')
+  revalidatePath('/pos')
+  revalidatePath('/kitchen')
+}
+
+export async function getOrderItems(orderId: number) {
+  const supabase = await createClient()
+  const restauranteId = await getRestauranteId()
+  if (!restauranteId) return []
+
+  const { data } = await supabase
+    .from('orden_items')
+    .select('*, productos(nombre)')
+    .eq('orden_id', orderId)
+    .eq('restaurante_id', restauranteId)
+
+  return data ?? []
 }
