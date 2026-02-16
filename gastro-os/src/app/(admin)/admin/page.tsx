@@ -5,24 +5,31 @@ import { redirect } from 'next/navigation'
 export default async function AdminDashboard() {
   const supabase = await createClient()
 
-  // 1. Obtenemos el perfil y los datos del restaurante en una sola consulta
-  const { data: perfil, error } = await supabase
+  // 1. Obtenemos el usuario actual
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  // 2. Obtenemos el perfil con el restaurante_id
+  const { data: perfil } = await supabase
     .from('perfiles')
-    .select(`
-      nombre_completo,
-      restaurantes (
-        id,
-        nombre
-      )
-    `)
+    .select('nombre_completo, restaurante_id')
+    .eq('id', user.id)
     .single()
 
-  if (error || !perfil?.restaurantes) {
-    // Si por algún motivo llegó aquí sin restaurante, lo mandamos al onboarding
+  if (!perfil?.restaurante_id) {
     redirect('/onboarding')
   }
 
-  const restaurante = perfil.restaurantes
+  // 3. Obtenemos los datos del restaurante
+  const { data: restaurante } = await supabase
+    .from('restaurantes')
+    .select('id, nombre')
+    .eq('id', perfil.restaurante_id)
+    .single()
+
+  if (!restaurante) {
+    redirect('/onboarding')
+  }
 
   return (
     <div className="p-8 flex flex-col gap-8">
