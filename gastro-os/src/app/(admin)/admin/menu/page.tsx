@@ -1,15 +1,18 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
-import { getProductos, getInsumos, calcularCostoProducto } from './actions'
-import { UtensilsCrossed, Plus, DollarSign, TrendingUp } from 'lucide-react'
+import { getProductos, getInsumos, calcularCostoProducto, getCategorias, getModificadores } from './actions'
+import { UtensilsCrossed, Plus, DollarSign, TrendingUp, Tag, Layers } from 'lucide-react'
 import ProductoDialog from './producto-dialog'
+import CategoriaDialog from './categoria-dialog'
+import ModificadorDialog from './modificador-dialog'
 
 type Producto = {
   id: string
   nombre: string
   descripcion: string | null
   precio: number
-  categoria: string | null
+  categoria_id: number | null
+  imagen_url: string | null
   disponible: boolean
   restaurante_id: string
   created_at: string
@@ -23,9 +26,11 @@ export default async function MenuPage() {
     redirect('/login')
   }
 
-  const [productos, insumos] = await Promise.all([
+  const [productos, insumos, categorias, modificadores] = await Promise.all([
     getProductos(),
-    getInsumos()
+    getInsumos(),
+    getCategorias(),
+    getModificadores()
   ])
 
   // Calcular costos para cada producto
@@ -55,9 +60,13 @@ export default async function MenuPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold mb-2">Menú e Ingeniería de Costos</h2>
-          <p className="text-zinc-400">Gestiona tus productos y optimiza tus márgenes</p>
+          <p className="text-zinc-400">Gestiona tus productos, categorías y modificadores</p>
         </div>
-        <ProductoDialog insumos={insumos} />
+        <div className="flex gap-3">
+          <CategoriaDialog />
+          <ModificadorDialog />
+          <ProductoDialog insumos={insumos} categorias={categorias} modificadores={modificadores} />
+        </div>
       </div>
 
       {/* KPIs */}
@@ -144,7 +153,7 @@ export default async function MenuPage() {
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-zinc-400">
-                        {producto.categoria || '-'}
+                        {categorias.find(c => c.id === producto.categoria_id)?.nombre || '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-zinc-400">
                         ${producto.costo_ingredientes.toFixed(2)}
@@ -167,7 +176,7 @@ export default async function MenuPage() {
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <ProductoDialog producto={producto} insumos={insumos} />
+                        <ProductoDialog producto={producto} insumos={insumos} categorias={categorias} modificadores={modificadores} />
                       </td>
                     </tr>
                   )
@@ -175,6 +184,101 @@ export default async function MenuPage() {
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Grid de dos columnas para Categorías y Modificadores */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Sección de Categorías */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
+          <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-800/50">
+            <div className="flex items-center gap-2">
+              <Tag className="w-5 h-5 text-orange-500" />
+              <h3 className="font-semibold">Categorías</h3>
+            </div>
+            <span className="text-sm text-zinc-400">{categorias.length} categorías</span>
+          </div>
+          <div className="p-4">
+            {categorias.length === 0 ? (
+              <div className="text-center py-8 text-zinc-400">
+                No hay categorías. Crea la primera categoría.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {categorias.map((categoria: any) => (
+                  <div
+                    key={categoria.id}
+                    className="flex items-center justify-between p-3 bg-zinc-800/50 rounded-lg hover:bg-zinc-800 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: categoria.color || '#666' }}
+                      />
+                      <div>
+                        <div className="font-medium">{categoria.nombre}</div>
+                        {categoria.descripcion && (
+                          <div className="text-sm text-zinc-400">{categoria.descripcion}</div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-zinc-400">Orden: {categoria.orden}</span>
+                      <CategoriaDialog categoria={categoria} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Sección de Modificadores */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
+          <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-800/50">
+            <div className="flex items-center gap-2">
+              <Layers className="w-5 h-5 text-blue-500" />
+              <h3 className="font-semibold">Modificadores</h3>
+            </div>
+            <span className="text-sm text-zinc-400">{modificadores.length} modificadores</span>
+          </div>
+          <div className="p-4">
+            {modificadores.length === 0 ? (
+              <div className="text-center py-8 text-zinc-400">
+                No hay modificadores. Crea el primer modificador.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {modificadores.map((mod: any) => (
+                  <div
+                    key={mod.id}
+                    className="flex items-center justify-between p-3 bg-zinc-800/50 rounded-lg hover:bg-zinc-800 transition-colors"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{mod.nombre}</span>
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded ${
+                            mod.tipo === 'extra'
+                              ? 'bg-green-900/50 text-green-400'
+                              : 'bg-red-900/50 text-red-400'
+                          }`}
+                        >
+                          {mod.tipo === 'extra' ? 'Extra' : 'Exclusión'}
+                        </span>
+                      </div>
+                      {mod.tipo === 'extra' && mod.precio > 0 && (
+                        <div className="text-sm text-zinc-400 mt-1">
+                          +${mod.precio.toFixed(2)}
+                        </div>
+                      )}
+                    </div>
+                    <ModificadorDialog modificador={mod} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

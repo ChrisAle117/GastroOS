@@ -202,3 +202,174 @@ export async function getInsumos() {
   return data || []
 }
 
+// ============ CATEGORÍAS ============
+export async function getCategorias() {
+  const supabase = await createClient()
+  const restaurante_id = await getRestauranteId()
+  if (!restaurante_id) return []
+
+  const { data } = await supabase
+    .from('categorias')
+    .select('*')
+    .eq('restaurante_id', restaurante_id)
+    .order('orden', { ascending: true })
+
+  return data || []
+}
+
+export async function createCategoria(data: any) {
+  const supabase = await createClient()
+  const restaurante_id = await getRestauranteId()
+  if (!restaurante_id) throw new Error('No restaurante_id')
+
+  const { data: categoria, error } = await supabase
+    .from('categorias')
+    .insert({ ...data, restaurante_id })
+    .select('*')
+    .single()
+
+  if (error) throw error
+  revalidatePath('/admin/menu')
+  return categoria
+}
+
+export async function updateCategoria(id: number, data: any) {
+  const supabase = await createClient()
+  const restaurante_id = await getRestauranteId()
+  if (!restaurante_id) throw new Error('No restaurante_id')
+
+  const { error } = await supabase
+    .from('categorias')
+    .update(data)
+    .eq('id', id)
+    .eq('restaurante_id', restaurante_id)
+
+  if (error) throw error
+  revalidatePath('/admin/menu')
+}
+
+export async function deleteCategoria(id: number) {
+  const supabase = await createClient()
+  const restaurante_id = await getRestauranteId()
+  if (!restaurante_id) throw new Error('No restaurante_id')
+
+  const { error } = await supabase
+    .from('categorias')
+    .delete()
+    .eq('id', id)
+    .eq('restaurante_id', restaurante_id)
+
+  if (error) throw error
+  revalidatePath('/admin/menu')
+}
+
+// ============ MODIFICADORES ============
+export async function getModificadores() {
+  const supabase = await createClient()
+  const restaurante_id = await getRestauranteId()
+  if (!restaurante_id) return []
+
+  const { data } = await supabase
+    .from('modificadores')
+    .select('*')
+    .eq('restaurante_id', restaurante_id)
+    .order('nombre', { ascending: true })
+
+  return data || []
+}
+
+export async function getModificadoresByProducto(producto_id: string) {
+  const supabase = await createClient()
+  const restaurante_id = await getRestauranteId()
+  if (!restaurante_id) return []
+
+  const { data } = await supabase
+    .from('producto_modificadores')
+    .select(`
+      modificador:modificadores(*)
+    `)
+    .eq('producto_id', producto_id)
+    .eq('restaurante_id', restaurante_id)
+    .order('orden', { ascending: true })
+
+  return data?.map((item: any) => item.modificador) || []
+}
+
+export async function createModificador(data: any) {
+  const supabase = await createClient()
+  const restaurante_id = await getRestauranteId()
+  if (!restaurante_id) throw new Error('No restaurante_id')
+
+  const { data: modificador, error } = await supabase
+    .from('modificadores')
+    .insert({ ...data, restaurante_id })
+    .select('*')
+    .single()
+
+  if (error) throw error
+  revalidatePath('/admin/menu')
+  return modificador
+}
+
+export async function updateModificador(id: number, data: any) {
+  const supabase = await createClient()
+  const restaurante_id = await getRestauranteId()
+  if (!restaurante_id) throw new Error('No restaurante_id')
+
+  const { error } = await supabase
+    .from('modificadores')
+    .update(data)
+    .eq('id', id)
+    .eq('restaurante_id', restaurante_id)
+
+  if (error) throw error
+  revalidatePath('/admin/menu')
+}
+
+export async function deleteModificador(id: number) {
+  const supabase = await createClient()
+  const restaurante_id = await getRestauranteId()
+  if (!restaurante_id) throw new Error('No restaurante_id')
+
+  const { error } = await supabase
+    .from('modificadores')
+    .delete()
+    .eq('id', id)
+    .eq('restaurante_id', restaurante_id)
+
+  if (error) throw error
+  revalidatePath('/admin/menu')
+}
+
+// ============ PRODUCTO-MODIFICADORES ============
+export async function saveProductoModificadores(producto_id: string, modificador_ids: number[]) {
+  const supabase = await createClient()
+  const restaurante_id = await getRestauranteId()
+  if (!restaurante_id) throw new Error('No restaurante_id')
+
+  // Eliminar relaciones anteriores
+  await supabase
+    .from('producto_modificadores')
+    .delete()
+    .eq('producto_id', producto_id)
+    .eq('restaurante_id', restaurante_id)
+
+  // Insertar nuevas relaciones
+  if (modificador_ids.length > 0) {
+    const items = modificador_ids.map((modificador_id, index) => ({
+      producto_id,
+      modificador_id,
+      orden: index,
+      restaurante_id
+    }))
+
+    const { error } = await supabase
+      .from('producto_modificadores')
+      .insert(items)
+
+    if (error) throw error
+  }
+
+  revalidatePath('/admin/menu')
+}
+

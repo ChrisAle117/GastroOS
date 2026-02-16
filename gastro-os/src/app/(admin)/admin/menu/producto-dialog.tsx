@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { productoSchema } from './schemas'
-import { createProducto, updateProducto, deleteProducto, getReceta, saveReceta } from './actions'
+import { createProducto, updateProducto, deleteProducto, getReceta, saveReceta, getModificadoresByProducto, saveProductoModificadores } from './actions'
 import { Edit, X, Plus, Trash2, AlertCircle } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
@@ -14,6 +14,20 @@ type Insumo = {
   unidad_medida: string
   costo_unitario: number
   stock_actual: number
+}
+
+type Categoria = {
+  id: number
+  nombre: string
+  color: string | null
+  icono: string | null
+}
+
+type Modificador = {
+  id: number
+  nombre: string
+  tipo: 'extra' | 'exclusion'
+  precio: number
 }
 
 type RecetaItem = {
@@ -27,21 +41,25 @@ type Producto = {
   nombre: string
   descripcion: string | null
   precio: number
-  categoria: string | null
+  categoria_id: number | null
+  imagen_url: string | null
 }
 
 type Props = {
   producto?: Producto
   insumos: Insumo[]
+  categorias: Categoria[]
+  modificadores: Modificador[]
 }
 
-export default function ProductoDialog({ producto, insumos }: Props) {
+export default function ProductoDialog({ producto, insumos, categorias, modificadores }: Props) {
   const [open, setOpen] = useState(false)
   const [pending, setPending] = useState(false)
   const [recetaItems, setRecetaItems] = useState<RecetaItem[]>([])
   const [selectedInsumo, setSelectedInsumo] = useState<number | null>(null)
   const [cantidad, setCantidad] = useState<string>('')
   const [esCritico, setEsCritico] = useState(false)
+  const [selectedModificadores, setSelectedModificadores] = useState<number[]>([])
   const router = useRouter()
 
   const { register, handleSubmit, formState: { errors }, reset, watch } = useForm({
@@ -50,11 +68,12 @@ export default function ProductoDialog({ producto, insumos }: Props) {
       nombre: producto.nombre,
       descripcion: producto.descripcion || '',
       precio: producto.precio,
-      categoria: producto.categoria || '',
+      categoria_id: producto.categoria_id,
+      imagen_url: producto.imagen_url || '',
     } : {}
   })
 
-  // Cargar receta y datos si es edición
+  // Cargar receta, modificadores y datos si es edición
   useEffect(() => {
     if (!open) return
 
@@ -63,14 +82,17 @@ export default function ProductoDialog({ producto, insumos }: Props) {
         nombre: producto.nombre,
         descripcion: producto.descripcion || '',
         precio: producto.precio,
-        categoria: producto.categoria || '',
+        categoria_id: producto.categoria_id,
+        imagen_url: producto.imagen_url || '',
       })
       loadReceta()
+      loadModificadores()
       return
     }
 
-    reset({ nombre: '', descripcion: '', precio: 0, categoria: '' })
+    reset({ nombre: '', descripcion: '', precio: 0, categoria_id: null, imagen_url: '' })
     setRecetaItems([])
+    setSelectedModificadores([])
   }, [open, producto, reset])
 
   const loadReceta = async () => {
@@ -82,6 +104,12 @@ export default function ProductoDialog({ producto, insumos }: Props) {
       es_critico: r.es_critico
     }))
     setRecetaItems(items)
+  }
+
+  const loadModificadores = async () => {
+    if (!producto) return
+    const mods = await getModificadoresByProducto(producto.id)
+    setSelectedModificadores(mods.map((m: any) => m.id))
   }
 
   const calcularCosto = () => {
@@ -119,16 +147,29 @@ export default function ProductoDialog({ producto, insumos }: Props) {
   const onSubmit = async (data: any) => {
     setPending(true)
     try {
+      let productoId = producto?.id
+      
       if (producto) {
         await updateProducto(producto.id, data)
         await saveReceta(producto.id, recetaItems)
+        await saveProductoModificadores(producto.id, selectedModificadores)
       } else {
-        await createProducto(data)
+        const newProducto = await createProducto(data)
+        if (newProducto?.id) {
+          const newProductoId = newProducto.id
+          if (recetaItems.length > 0) {
+            await saveReceta(newProductoId, recetaItems)
+          }
+          if (selectedModificadores.length > 0) {
+            await saveProductoModificadores(newProductoId, selectedModificadores)
+          }
+        }
       }
       router.refresh()
       setOpen(false)
       reset()
       setRecetaItems([])
+      setSelectedModificadores([])
     } catch (error) {
       console.error('Error:', error)
       alert('Error al guardar el producto')
@@ -235,10 +276,25 @@ export default function ProductoDialog({ producto, insumos }: Props) {
 
                 <div>
                   <label className="block text-sm font-medium mb-2">Categoría</label>
-                  <input
-                    {...register('categoria')}
+                  <select
+                    {...register('categoria_id')}
                     className="w-full bg-zinc-800 border border-zinc-700 px-4 py-2.5 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
-                    placeholder="Ej: Pizzas, Bebidas, Postres"
+                  >
+                    <option value="">Sin categoría</option>
+                    {categorias.map(cat => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">URL de Imagen (opcional)</label>
+                  <input
+                    {...register('imagen_url')}
+                    className="w-full bg-zinc-800 border border-zinc-700 px-4 py-2.5 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
+                    placeholder="https://ejemplo.com/imagen.jpg"
                   />
                 </div>
 
@@ -361,6 +417,66 @@ export default function ProductoDialog({ producto, insumos }: Props) {
                   )}
                 </div>
               )}
+
+              {/* Modificadores (Extras y Exclusiones) */}
+              <div className="space-y-4 border-t border-zinc-800 pt-6">
+                <h3 className="text-lg font-semibold">Modificadores Disponibles</h3>
+                <p className="text-sm text-zinc-400">
+                  Selecciona los extras y exclusiones que los clientes pueden elegir para este producto
+                </p>
+
+                {modificadores.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {modificadores.map(mod => {
+                      const isSelected = selectedModificadores.includes(mod.id)
+                      return (
+                        <label
+                          key={mod.id}
+                          className={`flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all ${
+                            isSelected
+                              ? 'border-orange-500 bg-orange-500/10'
+                              : 'border-zinc-700 hover:border-zinc-600'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedModificadores([...selectedModificadores, mod.id])
+                              } else {
+                                setSelectedModificadores(selectedModificadores.filter(id => id !== mod.id))
+                              }
+                            }}
+                            className="w-4 h-4"
+                          />
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{mod.nombre}</span>
+                              <span className={`text-xs px-2 py-0.5 rounded ${
+                                mod.tipo === 'extra' 
+                                  ? 'bg-green-900/50 text-green-400' 
+                                  : 'bg-red-900/50 text-red-400'
+                              }`}>
+                                {mod.tipo === 'extra' ? 'Extra' : 'Exclusión'}
+                              </span>
+                            </div>
+                            {mod.tipo === 'extra' && mod.precio > 0 && (
+                              <div className="text-sm text-zinc-400">
+                                +${mod.precio.toFixed(2)}
+                              </div>
+                            )}
+                          </div>
+                        </label>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-zinc-400 border border-dashed border-zinc-700 rounded-lg">
+                    No hay modificadores disponibles. Crea modificadores primero en el módulo de menú.
+                  </div>
+                )}
+              </div>
 
               {/* Análisis de Costos */}
               {producto && recetaItems.length > 0 && (
