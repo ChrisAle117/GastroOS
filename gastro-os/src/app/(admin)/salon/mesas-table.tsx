@@ -128,7 +128,7 @@ export default function MesasTable({ mesas }: MesasTableProps) {
                       disabled={isPending || mesa.estado === 'sucia'}
                       className="text-xs"
                     >
-                      Limpiar
+                      Marcar Sucia
                     </Button>
                   </div>
                 </td>

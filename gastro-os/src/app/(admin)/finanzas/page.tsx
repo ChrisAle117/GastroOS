@@ -98,7 +98,7 @@ export default async function FinanzasPage() {
           <CardContent>
             <div className="text-2xl font-bold text-blue-500">${propinas.toFixed(2)}</div>
             <p className="text-xs text-zinc-500 mt-1">
-              {pagosList.length > 0 ? ((propinas / ventas) * 100).toFixed(1) : 0}% de ventas
+              {ventas > 0 ? ((propinas / ventas) * 100).toFixed(1) : 0}% de ventas
             </p>
           </CardContent>
         </Card>
